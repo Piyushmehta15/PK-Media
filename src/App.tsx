@@ -1,5 +1,7 @@
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from 'react'
+import { Routes, Route } from 'react-router-dom'
 import { site, whatsappUrl } from './config/site'
+import OsApp from './os/OsApp'
 
 type IconName =
   | 'arrow'
@@ -870,29 +872,34 @@ export default function App() {
   const requestProposal = (summary: string) => goToContact(`Custom growth plan selections:\n${summary}`)
   const requestPackage = (packageName: string) => goToContact(`Package interest: ${packageName}`)
 
-  return (
-    <>
-      <a className="skip-link" href="#main-content">Skip to main content</a>
-      <Header onBookCall={() => goToContact()} />
-      <main id="main-content">
-        <Hero onBookCall={() => goToContact()} onBuildPlan={buildPlan} />
-        <ProblemSection />
-        <ServicesSection onContact={goToContact} />
-        <DistributionSection onBuildPlan={buildPlan} />
-        <InfluencerSection onContact={goToContact} />
-        <SocialManagementSection onContact={goToContact} />
-        <PackagesSection onRequestPackage={requestPackage} />
-        <GrowthPlanBuilder onRequestProposal={requestProposal} />
-        <CustomStrategySection onContact={goToContact} />
-        <HowItWorksSection onBookCall={() => goToContact()} />
-        <AnalyticsSection onContact={goToContact} />
-        <CaseStudiesSection onContact={goToContact} />
-        <AboutSection onContact={goToContact} />
-        <CreatorsSection />
-        <ContactSection context={leadContext} />
-      </main>
-      <Footer />
-      <FloatingWhatsApp />
-    </>
+return (
+    <Routes>
+      <Route path="/app/*" element={<OsApp />} />
+      <Route path="*" element={
+        <>
+          <a className="skip-link" href="#main-content">Skip to main content</a>
+          <Header onBookCall={() => goToContact()} />
+          <main id="main-content">
+            <Hero onBookCall={() => goToContact()} onBuildPlan={buildPlan} />
+            <ProblemSection />
+            <ServicesSection onContact={goToContact} />
+            <DistributionSection onBuildPlan={buildPlan} />
+            <InfluencerSection onContact={goToContact} />
+            <SocialManagementSection onContact={goToContact} />
+            <PackagesSection onRequestPackage={requestPackage} />
+            <GrowthPlanBuilder onRequestProposal={requestProposal} />
+            <CustomStrategySection onContact={goToContact} />
+            <HowItWorksSection onBookCall={() => goToContact()} />
+            <AnalyticsSection onContact={goToContact} />
+            <CaseStudiesSection onContact={goToContact} />
+            <AboutSection onContact={goToContact} />
+            <CreatorsSection />
+            <ContactSection context={leadContext} />
+          </main>
+          <Footer />
+          <FloatingWhatsApp />
+        </>
+      } />
+    </Routes>
   )
 }
