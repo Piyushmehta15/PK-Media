@@ -48,15 +48,27 @@ export function profileToUser(p: Profile): User {
 
 /** Sign in. Returns { ok, user, error }. */
 export async function signIn(email: string, password: string): Promise<AuthResult> {
+  console.log('[AUTH DEBUG] 1. Login submitted for email:', email)
   if (dataSource === 'supabase' && supabase) {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+    console.log('[AUTH DEBUG] 2. signInWithPassword response user:', data?.user ? { id: data.user.id, email: data.user.email } : null, 'session:', data?.session ? 'present' : 'null')
+    if (error) {
+      console.log('[AUTH DEBUG] 3. auth error:', error.message)
+    } else {
+      console.log('[AUTH DEBUG] 3. auth error: none')
+    }
+
     if (error || !data.user) {
       recordAudit('login.failed', 'anonymous', `sign-in failed for ${email}`)
       return { ok: false, error: 'Invalid email or password.' }
     }
 
+    console.log('[AUTH DEBUG] 4. authenticated user ID:', data.user.id)
+    console.log('[AUTH DEBUG] 5. authenticated email:', data.user.email)
+
     const { data: userData, error: getUserError } = await supabase.auth.getUser()
     if (getUserError || !userData.user) {
+      console.error('[AUTH DEBUG] supabase.auth.getUser failed:', getUserError)
       recordAudit('login.failed', data.user.id, `getUser failed after signInWithPassword: ${getUserError?.message ?? 'missing auth user'}`)
       return { ok: false, error: 'Unable to access account profile. Please contact admin.' }
     }
@@ -71,6 +83,9 @@ export async function signIn(email: string, password: string): Promise<AuthResul
       recordAudit('login.failed', userData.user.id, 'authenticated Supabase session but profile query returned no row')
       return { ok: false, error: 'Account profile not found.' }
     }
+    
+    console.log('[AUTH DEBUG] 10. role check result - role:', profile.role, 'is_active:', profile.is_active)
+
     if (!profile.is_active) {
       recordAudit('login.failed', profile.id, 'inactive account')
       return { ok: false, error: 'Your account is inactive.' }
@@ -93,11 +108,25 @@ export async function signIn(email: string, password: string): Promise<AuthResul
 /** Load the current user's profile from the database. */
 export async function fetchMyProfile(userId: string): Promise<ProfileFetchResult> {
   if (!supabase) return { profile: null, error: 'Supabase is not configured.' }
+  console.log('[AUTH DEBUG] 6. profiles query request for userId:', userId)
   const { data, error } = await supabase
     .from('profiles')
     .select('*')
     .eq('id', userId)
     .maybeSingle()
+  console.log('[AUTH DEBUG] 7. profiles query response data:', data)
+  if (error) {
+    console.log('[AUTH DEBUG] 8. profiles query error:', error.message, error.details, error.hint)
+  } else {
+    console.log('[AUTH DEBUG] 8. profiles query error: none')
+  }
+
+  const result = {
+    profile: data ? (data as unknown as Profile) : null,
+    error: error ? error.message : undefined
+  }
+  console.log('[AUTH DEBUG] 9. returned profile data:', result.profile, 'error:', result.error)
+
   if (error) {
     recordAudit('login.failed', userId, error.message)
     return { profile: null, error: error.message }

@@ -40,6 +40,7 @@ export default function Login() {
     const res = await login(value, password)
     setBusy(false)
     if (res.ok) {
+      console.log('[AUTH DEBUG] 11. Redirecting to dashboard')
       navigate('/app/dashboard')
     } else {
       setError(res.error ?? (supabaseMode ? 'Invalid email or password.' : 'Invalid credentials. Use one of the demo accounts below.'))

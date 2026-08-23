@@ -1,4 +1,4 @@
-import { FormEvent, ReactNode, useEffect, useMemo, useState } from 'react'
+import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { Routes, Route } from 'react-router-dom'
 import { site, whatsappUrl } from './config/site'
 import OsApp from './os/OsApp'
@@ -23,6 +23,25 @@ type IconName =
 
 type DeliveryResult = 'endpoint' | 'mailto'
 type DeliveryStatus = 'idle' | 'loading' | 'endpoint-success' | 'mailto-ready' | 'error'
+interface Package {
+  readonly id: string
+  readonly name: string
+  readonly price: string
+  readonly cadence: string
+  readonly priceLabel: string
+  readonly purpose: string
+  readonly includes: readonly string[]
+  readonly fullScope: readonly string[]
+  readonly whatWeHandle: string
+  readonly clientProvides: readonly string[]
+  readonly notIncluded: readonly string[]
+  readonly scopeNote: string
+  readonly cta: string
+  readonly bestFor?: string
+  readonly badge?: string
+  readonly note?: string
+  readonly priceHint?: string
+}
 
 const serviceLinks: Record<string, string> = {
   'influencer-marketing': '#creator-campaigns',
@@ -174,47 +193,110 @@ function SectionHeading({ eyebrow, title, description, align = 'left', dark = fa
 }
 
 function HeroVisual() {
+  const visualRef = useRef<HTMLDivElement | null>(null)
+  const [offset, setOffset] = useState({ x: 0, y: 0, rX: 0, rY: 0 })
+  const [isHovered, setIsHovered] = useState(false)
+
+  useEffect(() => {
+    const heroEl = visualRef.current?.closest('.hero') as HTMLElement | null
+    if (!heroEl) return
+
+    const handlePointerMove = (e: PointerEvent) => {
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+      const rect = heroEl.getBoundingClientRect()
+      if (rect.height <= 0 || rect.width <= 0) return
+
+      const relX = (e.clientX - rect.left) / rect.width - 0.5
+      const relY = (e.clientY - rect.top) / rect.height - 0.5
+
+      const clampedX = Math.max(-1, Math.min(1, relX))
+      const clampedY = Math.max(-1, Math.min(1, relY))
+
+      setOffset({
+        x: clampedX * 10,
+        y: clampedY * 8,
+        rX: -clampedY * 4,
+        rY: clampedX * 5,
+      })
+      setIsHovered(true)
+    }
+
+    const resetTransform = () => {
+      setOffset({ x: 0, y: 0, rX: 0, rY: 0 })
+      setIsHovered(false)
+    }
+
+    heroEl.addEventListener('pointermove', handlePointerMove, { passive: true })
+    heroEl.addEventListener('pointerleave', resetTransform)
+    window.addEventListener('scroll', resetTransform, { passive: true })
+    window.addEventListener('blur', resetTransform)
+    window.addEventListener('resize', resetTransform)
+
+    return () => {
+      heroEl.removeEventListener('pointermove', handlePointerMove)
+      heroEl.removeEventListener('pointerleave', resetTransform)
+      window.removeEventListener('scroll', resetTransform)
+      window.removeEventListener('blur', resetTransform)
+      window.removeEventListener('resize', resetTransform)
+    }
+  }, [])
+
   return (
-    <div className="hero-visual" aria-label="Illustration of a connected creator, content, and distribution workspace" role="img">
-      <div className="hero-visual__glow hero-visual__glow--teal" />
-      <div className="hero-visual__glow hero-visual__glow--orange" />
-      <div className="hero-dashboard">
-        <div className="hero-dashboard__topline">
-          <div className="visual-logo-dot"><span /><span /><span /></div>
-          <span>Growth workspace</span>
-          <span className="hero-dashboard__status"><i /> System ready</span>
-        </div>
-        <div className="hero-dashboard__head">
-          <div>
-            <span className="visual-kicker">Campaign view</span>
-            <strong>Creators + content<br />+ distribution</strong>
+    <div
+      ref={visualRef}
+      className="hero-visual"
+      aria-label="Illustration of a connected creator, content, and distribution workspace"
+      role="img"
+    >
+      <div
+        className="hero-visual__inner"
+        style={{
+          transform: isHovered
+            ? `perspective(1000px) translate3d(${offset.x.toFixed(1)}px, ${offset.y.toFixed(1)}px, 0) rotateX(${offset.rX.toFixed(1)}deg) rotateY(${offset.rY.toFixed(1)}deg)`
+            : 'perspective(1000px) translate3d(0px, 0px, 0px) rotateX(0deg) rotateY(0deg)',
+          transition: isHovered ? 'transform 0.12s cubic-bezier(0.2, 0, 0.2, 1)' : 'transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1)',
+        }}
+      >
+        <div className="hero-visual__glow hero-visual__glow--teal" />
+        <div className="hero-visual__glow hero-visual__glow--orange" />
+        <div className="hero-dashboard">
+          <div className="hero-dashboard__topline">
+            <div className="visual-logo-dot"><span /><span /><span /></div>
+            <span>Growth workspace</span>
+            <span className="hero-dashboard__status"><i /> System ready</span>
           </div>
-          <div className="visual-window-dots"><i /><i /><i /></div>
-        </div>
-        <div className="hero-dashboard__metrics">
-          <div className="visual-metric-card"><span>Attention</span><b>—</b><em className="trend-line trend-line--teal" /></div>
-          <div className="visual-metric-card"><span>Engagement</span><b>—</b><em className="trend-line trend-line--orange" /></div>
-          <div className="visual-metric-card"><span>Next signal</span><b>—</b><em className="trend-line trend-line--light" /></div>
-        </div>
-        <div className="hero-dashboard__lower">
-          <div className="visual-flow-card">
-            <div className="visual-flow-card__title"><span>Content flow</span><small>Live system</small></div>
-            <div className="visual-flow">
-              <span className="visual-flow__origin"><Icon name="play" size={14} /></span>
-              <i />
-              <span className="visual-flow__node">Edit</span>
-              <i />
-              <span className="visual-flow__node visual-flow__node--accent">Share</span>
+          <div className="hero-dashboard__head">
+            <div>
+              <span className="visual-kicker">Campaign view</span>
+              <strong>Creators + content<br />+ distribution</strong>
+            </div>
+            <div className="visual-window-dots"><i /><i /><i /></div>
+          </div>
+          <div className="hero-dashboard__metrics">
+            <div className="visual-metric-card"><span>Attention</span><b>—</b><em className="trend-line trend-line--teal" /></div>
+            <div className="visual-metric-card"><span>Engagement</span><b>—</b><em className="trend-line trend-line--orange" /></div>
+            <div className="visual-metric-card"><span>Next signal</span><b>—</b><em className="trend-line trend-line--light" /></div>
+          </div>
+          <div className="hero-dashboard__lower">
+            <div className="visual-flow-card">
+              <div className="visual-flow-card__title"><span>Content flow</span><small>Live system</small></div>
+              <div className="visual-flow">
+                <span className="visual-flow__origin"><Icon name="play" size={14} /></span>
+                <i />
+                <span className="visual-flow__node">Edit</span>
+                <i />
+                <span className="visual-flow__node visual-flow__node--accent">Share</span>
+              </div>
+            </div>
+            <div className="visual-orbit-card">
+              <div className="visual-orbit-card__ring"><i /><i /><i /></div>
+              <span>Creator<br />network</span>
             </div>
           </div>
-          <div className="visual-orbit-card">
-            <div className="visual-orbit-card__ring"><i /><i /><i /></div>
-            <span>Creator<br />network</span>
-          </div>
         </div>
+        <div className="visual-floating-card visual-floating-card--creator"><span aria-hidden="true"><Icon name="creator" size={17} /></span><div><small>Creator brief</small><b>Aligned</b></div></div>
+        <div className="visual-floating-card visual-floating-card--distribution"><span aria-hidden="true"><Icon name="distribution" size={17} /></span><div><small>Distribution</small><b>Connected</b></div></div>
       </div>
-      <div className="visual-floating-card visual-floating-card--creator"><span aria-hidden="true"><Icon name="creator" size={17} /></span><div><small>Creator brief</small><b>Aligned</b></div></div>
-      <div className="visual-floating-card visual-floating-card--distribution"><span aria-hidden="true"><Icon name="distribution" size={17} /></span><div><small>Distribution</small><b>Connected</b></div></div>
     </div>
   )
 }
@@ -417,35 +499,535 @@ function SocialManagementSection({ onContact }: { onContact: (context?: string) 
   )
 }
 
+function PackageScopeDialog({
+  pkg,
+  onClose,
+  onRequestPackage,
+}: {
+  pkg: Package
+  onClose: () => void
+  onRequestPackage: (packageName: string) => void
+}) {
+  const titleId = `package-scope-${pkg.id}`
+
+  return (
+    <div
+      className="package-dialog-backdrop"
+      role="presentation"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose()
+      }}
+    >
+      <section className="package-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId}>
+        <button className="package-dialog__close" type="button" aria-label="Close package scope" onClick={onClose}>
+          <Icon name="x" size={18} />
+        </button>
+        <div className="package-dialog__eyebrow"><span>PK Media package scope</span><i>{pkg.badge ?? 'PKM'}</i></div>
+        <div className="package-dialog__heading">
+          <div>
+            <h3 id={titleId}>{pkg.name}</h3>
+            <p>{pkg.purpose}</p>
+          </div>
+          <div className="package-dialog__price">
+            <small>{pkg.priceLabel}</small>
+            <strong>{pkg.price}</strong>
+            {pkg.cadence ? <em>{pkg.cadence}</em> : null}
+            {pkg.priceHint ? <em>{pkg.priceHint}</em> : null}
+          </div>
+        </div>
+        <div className="package-dialog__content">
+          <div className="package-dialog__included">
+            <h4>Included in this package</h4>
+            <ul>
+              {pkg.fullScope.map((item) => <li key={item}><span aria-hidden="true"><Icon name="check" size={15} /></span>{item}</li>)}
+            </ul>
+          </div>
+          <div className="package-dialog__supporting">
+            <div>
+              <h4>What PK Media does</h4>
+              <p>{pkg.whatWeHandle}</p>
+            </div>
+            <div>
+              <h4>What the client provides</h4>
+              <ul>
+                {pkg.clientProvides.map((item) => <li key={item}><span aria-hidden="true"><Icon name="check" size={14} /></span>{item}</li>)}
+              </ul>
+            </div>
+            <div>
+              <h4>Not included by default</h4>
+              <ul>
+                {pkg.notIncluded.map((item) => <li key={item}><span aria-hidden="true">—</span>{item}</li>)}
+              </ul>
+            </div>
+          </div>
+        </div>
+        <aside className="package-dialog__note"><span aria-hidden="true">†</span><p>{pkg.scopeNote}</p></aside>
+        <button type="button" className="button button--primary package-dialog__cta" onClick={() => { onClose(); onRequestPackage(pkg.name) }}>
+          {pkg.cta} <span aria-hidden="true"><Icon name="arrowUpRight" size={16} /></span>
+        </button>
+      </section>
+    </div>
+  )
+}
+
+function PackageComparison() {
+  return (
+    <div className="package-comparison" data-reveal>
+      <div className="package-comparison__heading">
+        <div>
+          <span className="eyebrow"><i />Compare packages</span>
+          <h3>Find the right growth starting point.</h3>
+        </div>
+        <p>Every package is designed to support growth with a clear, practical scope.</p>
+      </div>
+      <div className="comparison-table-wrap">
+        <table className="comparison-table">
+          <thead>
+            <tr>
+              <th scope="col">Package</th>
+              <th scope="col">Main focus</th>
+              <th scope="col">Strategy</th>
+              <th scope="col">Content</th>
+              <th scope="col">Social management</th>
+              <th scope="col">Creator marketing</th>
+              <th scope="col">Analytics</th>
+            </tr>
+          </thead>
+          <tbody>
+            {site.packageExperience.comparison.map((pkg) => (
+              <tr key={pkg.name} className={pkg.name === 'Growth Engine' ? 'comparison-table__featured' : ''}>
+                <th scope="row" data-label="Package">{pkg.name}</th>
+                <td data-label="Main focus">{pkg.focus}</td>
+                <td data-label="Strategy">{pkg.strategy}</td>
+                <td data-label="Content">{pkg.content}</td>
+                <td data-label="Social management">{pkg.social}</td>
+                <td data-label="Creator marketing">{pkg.creators}</td>
+                <td data-label="Analytics">{pkg.analytics}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+function PackageCard({
+  pkg,
+  onRequestPackage,
+  onViewFullDetails,
+}: {
+  pkg: Package
+  onRequestPackage: (packageName: string) => void
+  onViewFullDetails: () => void
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const limit = 5
+  const hasMore = pkg.includes.length > limit
+  const visibleIncludes = expanded ? pkg.includes : pkg.includes.slice(0, limit)
+  const isFeatured = pkg.id === 'growth-engine'
+
+  return (
+    <article className={`package-card ${isFeatured ? 'package-card--featured' : ''}`} key={pkg.id} data-reveal>
+      {pkg.badge && <span className="package-card__badge">{pkg.badge}</span>}
+      <div className="package-card__topline">
+        <span>{pkg.name}</span>
+        <i>{pkg.id === 'scale-partner' || pkg.id.includes('scale') ? 'Custom' : 'PKM'}</i>
+      </div>
+      <div className="package-card__price">
+        <small>{pkg.priceLabel}</small>
+        <strong>{pkg.price}</strong>
+        {pkg.cadence && <em>{pkg.cadence}</em>}
+        {pkg.priceHint && <em className="package-card__price-hint">{pkg.priceHint}</em>}
+      </div>
+      {pkg.bestFor && (
+        <div className="package-card__best-for">
+          <span>Best for:</span> {pkg.bestFor}
+        </div>
+      )}
+      <p className="package-card__purpose">{pkg.purpose}</p>
+      
+      <div className="package-card__checklist-container">
+        <ul className="package-card__checklist">
+          {visibleIncludes.map((item) => (
+            <li key={item}>
+              <span aria-hidden="true">
+                <Icon name="check" size={14} />
+              </span>
+              {item}
+            </li>
+          ))}
+        </ul>
+        {hasMore && (
+          <button
+            type="button"
+            className="package-card__expand-btn"
+            onClick={() => setExpanded(!expanded)}
+          >
+            {expanded ? 'Show Less Features' : 'View Full Scope'}
+            <span aria-hidden="true" style={{ display: 'inline-flex', transform: expanded ? 'rotate(45deg)' : 'none', transition: 'transform 0.2s', marginLeft: '6px' }}>
+              <Icon name="plus" size={10} />
+            </span>
+          </button>
+        )}
+      </div>
+
+      {pkg.note && (
+        <div className="package-card__note">
+          <span aria-hidden="true">†</span>
+          {pkg.note}
+        </div>
+      )}
+      
+      <div className="package-card__actions">
+        <button
+          type="button"
+          className="package-card__scope"
+          aria-haspopup="dialog"
+          onClick={onViewFullDetails}
+        >
+          Scope Breakdown <span aria-hidden="true"><Icon name="plus" size={12} /></span>
+        </button>
+        <button
+          type="button"
+          className="package-card__cta"
+          onClick={() => onRequestPackage(pkg.name)}
+        >
+          {pkg.cta} <span aria-hidden="true"><Icon name="arrowUpRight" size={14} /></span>
+        </button>
+      </div>
+    </article>
+  )
+}
+
 function PackagesSection({ onRequestPackage }: { onRequestPackage: (packageName: string) => void }) {
+  const [activePackage, setActivePackage] = useState<Package | null>(null)
+
+  useEffect(() => {
+    if (!activePackage) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setActivePackage(null)
+    }
+    document.body.classList.add('package-dialog-is-open')
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.body.classList.remove('package-dialog-is-open')
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [activePackage])
+
   return (
     <section className="section section--packages" id="packages">
       <div className="shell">
         <SectionHeading
           eyebrow="Starting points, not one-size-fits-all"
-          title="Choose the pace your growth needs."
-          description="Every engagement is shaped around your goals. These starting prices are editable and provide a clear place to begin the conversation."
+          title="Choose the Right Growth System for Your Brand"
+          description="From consistent content to full-scale creator-led growth, PK Media offers flexible solutions based on your business stage and goals."
           align="center"
         />
+
+        <div className="positioning-statement-container" data-reveal>
+          <div className="positioning-statement">
+            <span className="positioning-statement__badge">Core Positioning</span>
+            <p>“PK Media connects content, creators, distribution, and analytics into one coordinated growth system.”</p>
+          </div>
+        </div>
+
         <div className="packages-grid">
           {site.packages.map((pkg) => (
-            <article className={`package-card ${pkg.badge ? 'package-card--featured' : ''}`} key={pkg.id} data-reveal>
-              {pkg.badge && <span className="package-card__badge">{pkg.badge}</span>}
-              <div className="package-card__topline"><span>{pkg.name}</span><i>{pkg.id === 'scale-partner' ? 'Custom' : 'PKM'}</i></div>
-              <div className="package-card__price">
-                <small>{pkg.price === 'Custom' ? 'Custom pricing' : 'Starting from'}</small>
-                <strong>{pkg.price}</strong><em>{pkg.cadence}</em>
-              </div>
-              <p>{pkg.purpose}</p>
-              <ul>
-                {pkg.includes.map((item) => <li key={item}><span aria-hidden="true"><Icon name="check" size={14} /></span>{item}</li>)}
-              </ul>
-              {pkg.note && <div className="package-card__note"><span aria-hidden="true">†</span>{pkg.note}</div>}
-              <button type="button" className="package-card__cta" onClick={() => onRequestPackage(pkg.name)}>{pkg.cta}<span aria-hidden="true"><Icon name="arrowUpRight" size={16} /></span></button>
+            <PackageCard
+              key={pkg.id}
+              pkg={pkg}
+              onRequestPackage={onRequestPackage}
+              onViewFullDetails={() => setActivePackage(pkg)}
+            />
+          ))}
+        </div>
+
+        {/* Custom package CTA */}
+        <div className="custom-package-cta-container" data-reveal>
+          <div className="custom-package-cta">
+            <div className="custom-package-cta__text">
+              <h3>Need something tailored to your brand?</h3>
+              <p>We can build a custom growth plan based on your goals, content needs, creator budget, and growth stage.</p>
+            </div>
+            <button
+              type="button"
+              className="button button--primary custom-package-cta__btn"
+              onClick={() => onRequestPackage('Custom Tailored Growth Plan')}
+            >
+              Book a Free Strategy Call <span aria-hidden="true"><Icon name="arrowUpRight" size={18} /></span>
+            </button>
+          </div>
+        </div>
+
+        <p className="packages-disclaimer" data-reveal>
+          {site.packageExperience.shortPositioning} Package scopes, creator fees, platform needs and production requirements are confirmed in your proposal.
+        </p>
+        <PackageComparison />
+      </div>
+      {activePackage && <PackageScopeDialog pkg={activePackage} onClose={() => setActivePackage(null)} onRequestPackage={onRequestPackage} />}
+    </section>
+  )
+}
+
+function PerformanceCalculator({ onRequestPackage }: { onRequestPackage: (details: string) => void }) {
+  const [budget, setBudget] = useState<number>(50000)
+  const [cpm, setCpm] = useState<number>(50)
+
+  const targetViews = Math.round((budget / Math.max(1, cpm)) * 1000)
+
+  return (
+    <div className="perf-calculator-card" data-reveal>
+      <div className="perf-calculator-card__head">
+        <span className="perf-calculator-badge">Views Estimator</span>
+        <h4>Interactive View Target Calculator</h4>
+        <p>Estimate your guaranteed views based on your custom campaign budget and target CPM.</p>
+      </div>
+      <div className="perf-calculator-inputs">
+        <div className="perf-calc-field">
+          <label htmlFor="calc-budget">Campaign Budget (₹)</label>
+          <input
+            id="calc-budget"
+            type="number"
+            min="10000"
+            step="5000"
+            value={budget}
+            onChange={(e) => setBudget(Math.max(0, parseInt(e.target.value) || 0))}
+          />
+          <span className="perf-calc-field__hint">Suggested minimum: ₹25,000</span>
+        </div>
+        <div className="perf-calc-field">
+          <label htmlFor="calc-cpm">Agreed CPM (₹)</label>
+          <input
+            id="calc-cpm"
+            type="number"
+            min="10"
+            step="5"
+            value={cpm}
+            onChange={(e) => setCpm(Math.max(1, parseInt(e.target.value) || 1))}
+          />
+          <span className="perf-calc-field__hint">Cost per 1,000 views (depends on niche)</span>
+        </div>
+      </div>
+      <div className="perf-calculator-output">
+        <small>Estimated View Target</small>
+        <strong>{targetViews.toLocaleString('en-IN')} views</strong>
+        <p className="perf-calc-formula">Formula: Budget (₹{budget.toLocaleString('en-IN')}) ÷ CPM (₹{cpm}) × 1,000</p>
+      </div>
+      <button
+        type="button"
+        className="button button--primary perf-calculator__btn"
+        onClick={() => onRequestPackage(`Custom Campaign - Budget: ₹${budget.toLocaleString('en-IN')}, CPM: ₹${cpm}`)}
+      >
+        Lock in View Target <span aria-hidden="true"><Icon name="arrowUpRight" size={16} /></span>
+      </button>
+    </div>
+  )
+}
+
+function ClippingPerformanceSection({ onRequestPackage }: { onRequestPackage: (packageName: string) => void }) {
+  return (
+    <section className="section section--perf-distribution" id="performance-distribution">
+      <div className="shell">
+        <SectionHeading
+          eyebrow="Premium Curation & Reach"
+          title="Turn One Long-Form Video Into a High-Volume Short-Form Growth Engine"
+          description="One piece of long-form content can become dozens of strategic short-form assets. PK Media helps creators, founders, podcasters and brands identify high-potential moments, create multiple content variations and distribute them strategically."
+          align="center"
+          dark
+        />
+
+        <div className="positioning-statement-container positioning-statement-container--dark" data-reveal>
+          <div className="positioning-statement positioning-statement--dark">
+            <span className="positioning-statement__badge">Clipping Philosophy</span>
+            <p>“We don’t just edit clips. We strategically curate moments, create multiple creative variations and distribute content to maximize reach.”</p>
+          </div>
+        </div>
+
+        {/* Curation Approach Pillars */}
+        <div className="perf-approach-grid">
+          {site.clippingApproach.map((approach, idx) => (
+            <article className="perf-approach-card" key={idx} data-reveal>
+              <div className="perf-approach-card__num">0{idx + 1}</div>
+              <h4>{approach.title}</h4>
+              <p>{approach.description}</p>
             </article>
           ))}
         </div>
-        <p className="packages-disclaimer" data-reveal>Package scopes, creator fees, platform needs, and production requirements are confirmed in your proposal.</p>
+
+        <div className="perf-divider" />
+
+        <div className="perf-pricing-header">
+          <SectionHeading
+            eyebrow="Guaranteed View Campaigns"
+            title="CHOOSE YOUR BUDGET. BUILD YOUR VIEW TARGET."
+            description="Our distribution campaigns scale based on an agreed Cost Per Mille (CPM) model. Define your budget, and we back it up with view guarantees."
+            align="center"
+            dark
+          />
+        </div>
+
+        {/* Pricing & Calculator Grid */}
+        <div className="perf-pricing-calculator-layout">
+          <div className="perf-pricing-grid">
+            {site.clipPerformancePackages.map((pkg) => (
+              <article className="perf-card" key={pkg.id} data-reveal>
+                <div className="perf-card__top">
+                  <span>Campaign Tier</span>
+                  <h3>{pkg.name}</h3>
+                </div>
+                <div className="perf-card__metrics">
+                  <div className="perf-metric">
+                    <small>Campaign Budget</small>
+                    <strong>{pkg.price}</strong>
+                  </div>
+                  <div className="perf-metric">
+                    <small>Guaranteed View Target</small>
+                    <span className="perf-metric__views">{pkg.targetViews}</span>
+                  </div>
+                </div>
+                <div className="perf-card__best-for">
+                  <span>Best for:</span> {pkg.bestFor}
+                </div>
+                <ul className="perf-card__checklist">
+                  {pkg.includes.map((item) => (
+                    <li key={item}>
+                      <span aria-hidden="true"><Icon name="check" size={14} /></span>
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+                <button
+                  type="button"
+                  className="button button--primary perf-card__cta"
+                  onClick={() => onRequestPackage(pkg.name)}
+                >
+                  {pkg.cta} <span aria-hidden="true"><Icon name="arrowUpRight" size={14} /></span>
+                </button>
+              </article>
+            ))}
+
+            {/* Custom Campaign Option */}
+            <article className="perf-card perf-card--custom" data-reveal>
+              <div className="perf-card__top">
+                <span>Enterprise Tier</span>
+                <h3>Custom Campaign</h3>
+              </div>
+              <div className="perf-card__metrics">
+                <div className="perf-metric">
+                  <small>Budget Options</small>
+                  <strong>Custom Pricing</strong>
+                </div>
+                <div className="perf-metric">
+                  <small>View Target Guarantee</small>
+                  <span className="perf-metric__views">Custom Scope</span>
+                </div>
+              </div>
+              <p className="perf-card__custom-desc">
+                For large-scale creators, agencies, and brands seeking custom CPM models, whitelisting, paid amplification, and dedicated syndication.
+              </p>
+              <ul className="perf-card__checklist">
+                <li>
+                  <span aria-hidden="true"><Icon name="check" size={14} /></span>
+                  Starting from 5M+ guaranteed views
+                </li>
+                <li>
+                  <span aria-hidden="true"><Icon name="check" size={14} /></span>
+                  Tailored niche CPM parameters
+                </li>
+                <li>
+                  <span aria-hidden="true"><Icon name="check" size={14} /></span>
+                  Cross-platform whitelisting & amplification
+                </li>
+              </ul>
+              <button
+                type="button"
+                className="button button--ghost-light perf-card__cta"
+                onClick={() => onRequestPackage('Custom Performance Campaign')}
+              >
+                Build Custom Campaign <span aria-hidden="true"><Icon name="arrowUpRight" size={14} /></span>
+              </button>
+            </article>
+          </div>
+
+          <div className="perf-calculator-sidebar">
+            <PerformanceCalculator onRequestPackage={onRequestPackage} />
+          </div>
+        </div>
+
+        {/* Protection & Disclaimer */}
+        <div className="perf-protection-container" data-reveal>
+          <div className="perf-protection-card">
+            <div className="perf-protection-card__header">
+              <span className="perf-badge">Performance Protection</span>
+              <h4>Our Performance Protection Policy</h4>
+            </div>
+            <p>
+              If the agreed view target is not achieved within the initial campaign duration, PK Media first continues content optimization and distribution during an agreed extension period at no additional management cost.
+            </p>
+            <p>
+              If the agreed target is still not met after the extension, the unachieved portion of the campaign value may be refunded proportionally based on the agreed CPM and campaign agreement terms.
+            </p>
+          </div>
+          <div className="perf-terms-card">
+            <h4>Campaign Agreements & Terms</h4>
+            <ul>
+              <li>View targets depend on the agreed CPM, target channels, and campaign scope.</li>
+              <li>Only eligible views counted under the final signed campaign agreement are included.</li>
+              <li>Influencer, creator, and third-party advertising distribution costs may be handled separately.</li>
+              <li>Final pricing, CPM targets, and guarantees are subject to a signed campaign agreement.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function PackageOperatingModelSection() {
+  return (
+    <section className="section section--package-operations" aria-label="How PK Media Works">
+      <div className="shell">
+        <SectionHeading
+          eyebrow="A clear working rhythm"
+          title="How PK Media Works"
+          description="A connected process for building attention, improving consistency and learning from each cycle."
+          align="center"
+        />
+        <div className="package-process" data-reveal>
+          {site.packageExperience.process.map((step) => (
+            <article className="package-process__step" key={step.number}>
+              <span>{step.number}</span>
+              <h3>{step.title}</h3>
+              <p>{step.description}</p>
+            </article>
+          ))}
+        </div>
+        <aside className="commercial-scope" data-reveal>
+          <div><span>Commercial Scope</span><i aria-hidden="true">†</i></div>
+          <p>{site.packageExperience.commercialScope}</p>
+        </aside>
+        <div className="package-responsibilities" data-reveal>
+          <details className="package-responsibility" open>
+            <summary>
+              <span><i aria-hidden="true">01</i>What Does the Client Provide?</span>
+              <b aria-hidden="true"><Icon name="plus" size={17} /></b>
+            </summary>
+            <ul>
+              {site.packageExperience.clientProvides.map((item) => <li key={item}><span aria-hidden="true"><Icon name="check" size={15} /></span>{item}</li>)}
+            </ul>
+          </details>
+          <details className="package-responsibility" open>
+            <summary>
+              <span><i aria-hidden="true">02</i>What Does PK Media Handle?</span>
+              <b aria-hidden="true"><Icon name="plus" size={17} /></b>
+            </summary>
+            <ul>
+              {site.packageExperience.pkMediaHandles.map((item) => <li key={item}><span aria-hidden="true"><Icon name="check" size={15} /></span>{item}</li>)}
+            </ul>
+          </details>
+        </div>
       </div>
     </section>
   )
@@ -601,10 +1183,8 @@ function AboutSection({ onContact }: { onContact: (context?: string) => void }) 
   return (
     <section className="section section--about" id="about">
       <div className="shell about-layout">
-        <div className="about-seal-wrap" data-reveal>
-          <div className="about-seal__ring"><span>GROW ORGANICALLY • SHINE GLOBALLY •</span></div>
-          <img src={site.company.assets.seal} alt="PK Media circular logo" />
-          <div className="about-seal__orbit about-seal__orbit--one" /><div className="about-seal__orbit about-seal__orbit--two" />
+        <div className="about-logo-wrap" data-reveal>
+          <img src={site.company.assets.leafLogo} alt="PK Media Logo" className="about-logo-img" />
         </div>
         <div className="about-copy">
           <SectionHeading eyebrow={site.about.eyebrow} title={site.about.title} description={site.about.description} />
@@ -887,6 +1467,8 @@ return (
             <InfluencerSection onContact={goToContact} />
             <SocialManagementSection onContact={goToContact} />
             <PackagesSection onRequestPackage={requestPackage} />
+            <ClippingPerformanceSection onRequestPackage={requestPackage} />
+            <PackageOperatingModelSection />
             <GrowthPlanBuilder onRequestProposal={requestProposal} />
             <CustomStrategySection onContact={goToContact} />
             <HowItWorksSection onBookCall={() => goToContact()} />
