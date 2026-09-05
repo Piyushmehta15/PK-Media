@@ -65,6 +65,7 @@ export type InfluencerStatus =
 
 export interface Influencer {
   id: string
+  organization_id?: string
   name: string
   username: string
   platform: 'Instagram' | 'YouTube' | 'TikTok' | 'LinkedIn' | 'X'

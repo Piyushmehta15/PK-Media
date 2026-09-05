@@ -38,6 +38,16 @@ export async function loadExpenses(): Promise<Expense[]> {
   return useSupabase ? sb.getExpenses() : db.expenses
 }
 
+export async function createCampaign(input: Partial<Campaign>) {
+  return sb.createCampaign(input)
+}
+export async function createInfluencer(input: Partial<Influencer>) {
+  return sb.createInfluencer(input)
+}
+export async function createBrand(input: Partial<Brand>) {
+  return sb.createBrand(input)
+}
+
 export function getCampaigns(): Campaign[] { return db.campaigns }
 export function getInfluencers(): Influencer[] { return db.influencers }
 export function getBrands(): Brand[] { return db.brands }
@@ -68,6 +78,32 @@ export function getEnrichedCampaigns(): CampaignEnriched[] {
     const client = getBrandById(c.client)
     const assignedInfluencers = c.influencerIds.map(getInfluencerById).filter(Boolean) as Influencer[]
     const campaignDeliverables = db.deliverables.filter((d) => d.campaignId === c.id)
+    const profit = c.revenue - c.expenses
+    const margin = c.revenue > 0 ? Math.round((profit / c.revenue) * 100) : 0
+    return {
+      ...c,
+      clientName: client?.name ?? 'Unknown',
+      assignedInfluencers,
+      campaignDeliverables,
+      profit,
+      margin,
+    }
+  })
+}
+
+export async function loadEnrichedCampaigns(): Promise<CampaignEnriched[]> {
+  const [campaigns, brands, influencers, deliverables] = await Promise.all([
+    loadCampaigns(),
+    loadBrands(),
+    loadInfluencers(),
+    loadDeliverables(),
+  ])
+  const brandMap = new Map(brands.map((b) => [b.id, b]))
+  const infMap = new Map(influencers.map((i) => [i.id, i]))
+  return campaigns.map((c) => {
+    const client = brandMap.get(c.client)
+    const assignedInfluencers = c.influencerIds.map((id) => infMap.get(id)).filter(Boolean) as Influencer[]
+    const campaignDeliverables = deliverables.filter((d) => d.campaignId === c.id)
     const profit = c.revenue - c.expenses
     const margin = c.revenue > 0 ? Math.round((profit / c.revenue) * 100) : 0
     return {
@@ -117,6 +153,40 @@ export function getDashboardSummary(): DashboardSummary {
     pendingDeliverables: db.deliverables.filter((d) => d.status === 'Pending' || d.status === 'In Progress').length,
     revenue,
     expenses,
+    profit,
+    margin: revenue > 0 ? Math.round((profit / revenue) * 100) : 0,
+    totalReach,
+    totalViews,
+    avgEngagement,
+  }
+}
+
+export async function loadDashboardSummary(): Promise<DashboardSummary> {
+  const [campaigns, influencers, brands, deliverables, expenses] = await Promise.all([
+    loadCampaigns(),
+    loadInfluencers(),
+    loadBrands(),
+    loadDeliverables(),
+    loadExpenses(),
+  ])
+  const active = campaigns.filter((c) => ['Planning', 'Outreach', 'Negotiation', 'Content', 'Approval', 'Live'].includes(c.status))
+  const revenue = campaigns.reduce((s, c) => s + c.revenue, 0)
+  const totalExpenses = campaigns.reduce((s, c) => s + c.expenses, 0) + expenses.reduce((s, e) => s + e.amount, 0)
+  const profit = revenue - totalExpenses
+  const totalReach = campaigns.reduce((s, c) => s + c.results.reach, 0)
+  const totalViews = campaigns.reduce((s, c) => s + c.results.views, 0)
+  const withResults = campaigns.filter((c) => c.results.engagement > 0)
+  const avgEngagement = withResults.length ? Math.round((withResults.reduce((s, c) => s + c.results.engagement, 0) / withResults.length) * 10) / 10 : 0
+
+  return {
+    activeCampaigns: active.length,
+    totalInfluencers: influencers.length,
+    totalBrands: brands.length,
+    pendingFollowUps: db.followUps.filter((f) => f.status === 'Pending').length,
+    upcomingMeetings: db.meetings.length,
+    pendingDeliverables: deliverables.filter((d) => d.status === 'Pending' || d.status === 'In Progress').length,
+    revenue,
+    expenses: totalExpenses,
     profit,
     margin: revenue > 0 ? Math.round((profit / revenue) * 100) : 0,
     totalReach,
@@ -214,6 +284,56 @@ export function getCampaignDetail(campaignId: string): CampaignDetail | null {
   })
 
   const creatorCost = campaignInfluencers.reduce((s, ci) => s + ci.fee, 0)
+  const otherCosts = Math.max(0, base.expenses - creatorCost)
+  const totalCost = creatorCost + otherCosts
+  const profit = base.revenue - totalCost
+  const margin = base.revenue > 0 ? Math.round((profit / base.revenue) * 100) : 0
+
+  return {
+    campaign: base,
+    brand,
+    influencers,
+    deliverables: base.campaignDeliverables,
+    creatorCost,
+    otherCosts,
+    totalCost,
+    profit,
+    margin,
+  }
+}
+
+export async function loadCampaignDetail(campaignId: string): Promise<CampaignDetail | null> {
+  const enriched = await loadEnrichedCampaigns()
+  const base = enriched.find((c) => c.id === campaignId)
+  if (!base) return null
+  const brands = await loadBrands()
+  const brand = brands.find((b) => b.id === base.client) ?? {
+    id: base.client,
+    name: base.clientName || 'Unknown Brand',
+    contactPerson: '',
+    email: '',
+    phone: '',
+    website: '',
+    industry: '',
+    budget: '',
+    activeCampaigns: 1,
+    previousCampaigns: 0,
+    notes: '',
+    paymentStatus: 'pending' as const,
+    createdAt: new Date().toISOString(),
+  }
+  const cis = useSupabase ? await sb.getCampaignInfluencers(campaignId) : db.campaignInfluencers.filter((x) => x.campaignId === campaignId)
+
+  const influencers = base.assignedInfluencers.map((inf) => {
+    const ci = cis.find((x) => x.influencerId === inf.id)
+    return {
+      influencer: inf,
+      fee: ci?.fee ?? 0,
+      outreachStatus: (OUTREACH_STATUS[ci?.status ?? inf.status] ?? 'sent') as 'sent' | 'replied' | 'negotiating' | 'confirmed',
+    }
+  })
+
+  const creatorCost = cis.reduce((s, ci) => s + ci.fee, 0)
   const otherCosts = Math.max(0, base.expenses - creatorCost)
   const totalCost = creatorCost + otherCosts
   const profit = base.revenue - totalCost

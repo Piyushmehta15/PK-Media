@@ -71,6 +71,52 @@ export async function getBrands(): Promise<Brand[]> {
   return db.brands
 }
 
+export async function createBrand(input: Partial<Brand>): Promise<{ ok: boolean; data?: Brand; error?: string }> {
+  if (dataSource === 'supabase' && supabase) {
+    const organization_id = await getCurrentOrgId()
+    if (!organization_id) return { ok: false, error: 'No organization context for this session.' }
+    const { data, error } = await supabase.from('brands').insert({
+      organization_id,
+      name: input.name ?? '',
+      contact_person: input.contactPerson ?? '',
+      email: input.email ?? '',
+      phone: input.phone ?? '',
+      website: input.website ?? '',
+      industry: input.industry ?? '',
+      budget: input.budget ?? '',
+      active_campaigns: input.activeCampaigns ?? 0,
+      previous_campaigns: input.previousCampaigns ?? 0,
+      notes: input.notes ?? '',
+      payment_status: input.paymentStatus ?? 'pending',
+    }).select().single()
+    if (error) return { ok: false, error: error.message }
+    const b: Brand = {
+      id: data.id, organization_id: data.organization_id, name: data.name, contactPerson: data.contact_person,
+      email: data.email, phone: data.phone, website: data.website, industry: data.industry, budget: data.budget,
+      activeCampaigns: Number(data.active_campaigns), previousCampaigns: Number(data.previous_campaigns),
+      notes: data.notes, paymentStatus: data.payment_status, createdAt: data.created_at,
+    }
+    return { ok: true, data: b }
+  }
+  const newBrand: Brand = {
+    id: `b-${Date.now()}`,
+    name: input.name ?? '',
+    contactPerson: input.contactPerson ?? '',
+    email: input.email ?? '',
+    phone: input.phone ?? '',
+    website: input.website ?? '',
+    industry: input.industry ?? '',
+    budget: input.budget ?? '',
+    activeCampaigns: input.activeCampaigns ?? 0,
+    previousCampaigns: input.previousCampaigns ?? 0,
+    notes: input.notes ?? '',
+    paymentStatus: input.paymentStatus ?? 'pending',
+    createdAt: new Date().toISOString(),
+  }
+  db.brands.unshift(newBrand)
+  return { ok: true, data: newBrand }
+}
+
 // ============================================================
 // INFLUENCERS
 // ============================================================
@@ -87,21 +133,56 @@ export async function getInfluencers(): Promise<Influencer[]> {
   return db.influencers
 }
 
-export async function createInfluencer(input: Partial<Influencer>): Promise<{ ok: boolean; error?: string }> {
+export async function createInfluencer(input: Partial<Influencer>): Promise<{ ok: boolean; data?: Influencer; error?: string }> {
   if (dataSource === 'supabase' && supabase) {
     // organization_id is resolved from the session, never from the client.
     const organization_id = await getCurrentOrgId()
     if (!organization_id) return { ok: false, error: 'No organization context for this session.' }
-    const { error } = await supabase.from('influencers').insert({
+    const { data, error } = await supabase.from('influencers').insert({
       organization_id,
-      name: input.name ?? '', username: input.username ?? '', platform: input.platform ?? 'Instagram',
-      niche: input.niche ?? '', location: input.location ?? '', email: input.email ?? '', phone: input.phone ?? '',
-      rate: input.rate ?? 0, status: input.status ?? 'New', notes: input.notes ?? '', tags: input.tags ?? [],
-    })
+      name: input.name ?? '',
+      username: input.username ?? '',
+      platform: input.platform ?? 'Instagram',
+      niche: input.niche ?? '',
+      location: input.location ?? '',
+      email: input.email ?? '',
+      phone: input.phone ?? '',
+      followers: input.followers ?? 0,
+      engagement_rate: input.engagementRate ?? 0,
+      rate: input.rate ?? 0,
+      status: input.status ?? 'New',
+      notes: input.notes ?? '',
+      tags: input.tags ?? [],
+    }).select().single()
     if (error) return { ok: false, error: error.message }
-    return { ok: true }
+    const inf: Influencer = {
+      id: data.id, organization_id: data.organization_id, name: data.name, username: data.username,
+      platform: data.platform, niche: data.niche, location: data.location, followers: Number(data.followers),
+      engagementRate: Number(data.engagement_rate), email: data.email, phone: data.phone, rate: Number(data.rate),
+      status: data.status, campaigns: [], notes: data.notes, tags: data.tags ?? [], createdAt: data.created_at,
+    }
+    return { ok: true, data: inf }
   }
-  return { ok: true }
+  const newInf: Influencer = {
+    id: `inf-${Date.now()}`,
+    name: input.name ?? '',
+    username: input.username ?? '',
+    platform: input.platform ?? 'Instagram',
+    niche: input.niche ?? '',
+    location: input.location ?? '',
+    followers: input.followers ?? 0,
+    engagementRate: input.engagementRate ?? 0,
+    email: input.email ?? '',
+    phone: input.phone ?? '',
+    rate: input.rate ?? 0,
+    status: input.status ?? 'New',
+    campaigns: [],
+    notes: input.notes ?? '',
+    tags: input.tags ?? [],
+    createdAt: new Date().toISOString(),
+  }
+  db.influencers.unshift(newInf)
+  return { ok: true, data: newInf }
 }
 
 export async function updateInfluencer(id: string, patch: Partial<Influencer>): Promise<{ ok: boolean; error?: string }> {
@@ -120,10 +201,76 @@ export async function updateInfluencer(id: string, patch: Partial<Influencer>): 
 // ============================================================
 export async function getCampaigns(): Promise<Campaign[]> {
   if (dataSource === 'supabase' && supabase) {
-    const { data } = await supabase.from('campaigns').select('*').order('created_at', { ascending: false })
-    return (data ?? []).map(mapCampaign)
+    const { data: campaignRows } = await supabase.from('campaigns').select('*').order('created_at', { ascending: false })
+    if (!campaignRows) return []
+    const { data: ciRows } = await supabase.from('campaign_influencers').select('*')
+    const ciMap: Record<string, string[]> = {}
+    for (const ci of ciRows ?? []) {
+      if (!ciMap[ci.campaign_id]) ciMap[ci.campaign_id] = []
+      ciMap[ci.campaign_id].push(ci.influencer_id)
+    }
+    return campaignRows.map((r: any) => ({
+      ...mapCampaign(r),
+      influencerIds: ciMap[r.id] ?? [],
+    }))
   }
   return db.campaigns
+}
+
+export async function createCampaign(input: Partial<Campaign>): Promise<{ ok: boolean; data?: Campaign; error?: string }> {
+  if (dataSource === 'supabase' && supabase) {
+    const organization_id = await getCurrentOrgId()
+    if (!organization_id) return { ok: false, error: 'No organization context for this session.' }
+    const { data, error } = await supabase.from('campaigns').insert({
+      organization_id,
+      name: input.name ?? '',
+      client: input.client,
+      budget: input.budget ?? 0,
+      start_date: input.startDate || null,
+      end_date: input.endDate || null,
+      status: input.status ?? 'Planning',
+      content_status: input.contentStatus ?? 0,
+      revenue: input.revenue ?? 0,
+      expenses: input.expenses ?? 0,
+      results_reach: input.results?.reach ?? 0,
+      results_views: input.results?.views ?? 0,
+      results_engagement: input.results?.engagement ?? 0,
+      results_conversions: input.results?.conversions ?? 0,
+    }).select().single()
+    if (error) return { ok: false, error: error.message }
+    
+    if (data?.id && input.influencerIds && input.influencerIds.length > 0) {
+      const ciRows = input.influencerIds.map((infId) => ({
+        organization_id,
+        campaign_id: data.id,
+        influencer_id: infId,
+        fee: 0,
+        status: 'New',
+      }))
+      await supabase.from('campaign_influencers').insert(ciRows)
+    }
+
+    const c = mapCampaign(data)
+    c.influencerIds = input.influencerIds ?? []
+    return { ok: true, data: c }
+  }
+  const newCamp: Campaign = {
+    id: `c-${Date.now()}`,
+    name: input.name ?? '',
+    client: input.client ?? (db.brands[0]?.id ?? ''),
+    budget: input.budget ?? 0,
+    startDate: input.startDate ?? new Date().toISOString().split('T')[0],
+    endDate: input.endDate ?? new Date().toISOString().split('T')[0],
+    influencerIds: input.influencerIds ?? [],
+    deliverables: [],
+    status: input.status ?? 'Planning',
+    contentStatus: input.contentStatus ?? 0,
+    revenue: input.revenue ?? 0,
+    expenses: input.expenses ?? 0,
+    results: input.results ?? { reach: 0, views: 0, engagement: 0, conversions: 0 },
+  }
+  db.campaigns.unshift(newCamp)
+  return { ok: true, data: newCamp }
 }
 
 export async function getCampaignDeliverables(campaignId: string): Promise<Deliverable[]> {
